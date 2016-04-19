@@ -21,6 +21,8 @@ class RecommendService(object):
         self._movie_score_dao = movie_score_dao
         self._user_correlation_dao = user_correlation_dao
 
+        self._normalized = False
+
         self._build_user_correlation()
 
     @property
@@ -78,29 +80,51 @@ class RecommendService(object):
                     self._uid(a),
                     (self._uid(u), correl))
 
+    def set_normalized(self, normalized):
+        self._normalized = normalized
+
     def get_correlation(self, uid1, uid2):
         return self._user_correlation_dao.get_correlation(uid1, uid2)
 
     def get_sorted_neighbors(self, uid):
         return self._user_correlation_dao.get_sorted_correlation(uid)
 
-    def _fn_predict(self, score_wieghts):
+    @property
+    def _fn_predict(self):
+        return self._fn_predict_norm if self._normalized else self._fn_predict_simple
+
+    def _fn_predict_simple(self, score_wieghts, mu):
         _score_wieghts = filter(operator.itemgetter(0), score_wieghts)
 
         sum_r, sum_w = 0, 0
-        for r, w in _score_wieghts:
+        for r, _, w in _score_wieghts:
             sum_r += (r * w)
             sum_w += w
         return sum_r / sum_w if sum_w else 0
 
+    def _fn_predict_norm(self, score_wieghts, mu):
+        _score_wieghts = filter(operator.itemgetter(0), score_wieghts)
+
+        sum_r, sum_w = 0, 0
+        for r, mu_r, w in _score_wieghts:
+            sum_r += ((r-mu_r) * w)
+            sum_w += w
+        return sum_r / sum_w + mu if sum_w else 0
+
     def predict_all(self, uid):
+        def mu(v):
+            return mean(filter(bool, v))
+
         neighbors, nweights = zip(*self.get_sorted_neighbors(uid)[:5])
         nscores = [self._user_scores(self._uidx(n)) for n in neighbors]
 
+        mu_u = mu(self._user_scores(self._uidx(uid)))
+        nmeans = [mu(v) for v in nscores]
+
         result, sz = [], len(neighbors)
         for i in xrange(self.total_movies):
-            l = [(nscores[n][i], nweights[n]) for n in xrange(sz)]
-            result.append((self._mid(i), self._fn_predict(l)))
+            l = [(nscores[n][i], nmeans[n], nweights[n]) for n in xrange(sz)]
+            result.append((self._mid(i), self._fn_predict(l, mu_u)))
         return result
 
     def top_n_movies(self, uid, n):
@@ -130,6 +154,13 @@ if __name__ == '__main__':
             for neighbor, correl in neighbors:
                 print '{:4d}: {:4d} {}'.format(u, neighbor, correl)
 
+        print '===== Top 3 Movies ====='
+        for u in [3712, 3525, 3867, 89]:
+            for m, score in recommender.top_n_movies(u, 3):
+                print '{:4d}: ({:5d}, {})'.format(u, m, score)
+
+        print '\n\nApply normalization'
+        recommender.set_normalized(True)
         print '===== Top 3 Movies ====='
         for u in [3712, 3525, 3867, 89]:
             for m, score in recommender.top_n_movies(u, 3):
