@@ -15,7 +15,10 @@ class AbstractDaoCSV(object):
             cvsreader = csv.reader(csvfile, delimiter=',')
             self._headers = cvsreader.next()[1:]
             for row in cvsreader:
-                self._records.append(map(lambda x: int(x) if x else 0, row[1:]))
+                self._records.append(map(self._fmt_value, row[1:]))
+
+    def _fmt_value(self, x):
+        return int(x) if x else 0
 
     def total_records(self):
         return len(self._records)
