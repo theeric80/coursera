@@ -7,6 +7,9 @@ class UserFeatureDao(AbstractDaoCSV):
     def _fmt_value(self, x):
         return float(x) if x else 0
 
+    def index_user(self, uid):
+        return self._record_names.index(uid)
+
 if __name__ == '__main__':
     def main():
         filename = 'user_features.csv'
